@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rialo Galaxy — 中文重制版</title>
+    
+    <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
+    <script src="https://unpkg.com/3d-force-graph@1.73.1/dist/3d-force-graph.min.js"></script>
+
+<style>
+        body { margin: 0; overflow: hidden; background-color: #000005; font-family: 'Microsoft YaHei', 'Segoe UI', sans-serif; }
+        #3d-graph { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+
+        /* =========================================
+           新增加的大标题样式 (Intro Title)
+           ========================================= */
+        #intro-title-container {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            display: flex; justify-content: center; align-items: center;
+            pointer-events: none; /* 让鼠标点击可以穿透标题，不影响操作 */
+            z-index: 2000; /* 保证在最上层 */
+            perspective: 1000px;
+        }
+
+        .intro-text {
+            font-size: 5vw; /* 响应式字体大小 */
+            font-weight: 900;
+            color: #fff;
+            text-transform: uppercase;
+            letter-spacing: 10px;
+            text-align: center;
+            opacity: 0;
+            
+            /* 文字描边和发光效果 */
+            text-shadow: 0 0 20px rgba(0, 243, 255, 0.6), 0 0 50px rgba(0, 243, 255, 0.4);
+            background: linear-gradient(180deg, #fff 0%, #a2f9ff 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            
+            /* 动画定义 */
+            animation: titleSequence 5s ease-out forwards;
+        }
+
+        /* 副标题小字 */
+        .intro-sub {
+            display: block;
+            font-size: 1.2rem;
+            letter-spacing: 5px;
+            color: #00f3ff;
+            margin-top: 10px;
+            opacity: 0;
+            font-weight: 400;
+            -webkit-text-fill-color: #00f3ff; /* 重置填充色 */
+            animation: subTitleSequence 5s ease-out forwards;
+        }
+
+        @keyframes titleSequence {
+            0% { opacity: 0; transform: scale(0.8) translateY(20px); filter: blur(10px); letter-spacing: 30px; }
+            20% { opacity: 1; transform: scale(1) translateY(0); filter: blur(0px); letter-spacing: 10px; }
+            70% { opacity: 1; transform: scale(1.05); filter: blur(0px); }
+            100% { opacity: 0; transform: scale(1.5); filter: blur(20px); letter-spacing: 20px; }
+        }
+
+        @keyframes subTitleSequence {
+            0%, 20% { opacity: 0; transform: translateY(10px); }
+            30% { opacity: 0.8; transform: translateY(0); }
+            70% { opacity: 0.8; }
+            100% { opacity: 0; transform: translateY(-10px); }
+        }
+
+        /* Loading */
+        #loading {
+            position: fixed; inset: 0; background: #000005; z-index: 999;
+            display: flex; justify-content: center; align-items: center; flex-direction: column;
+            color: #00f3ff; transition: opacity 1s; pointer-events: none;
+        }
+        .loader-ring {
+            width: 50px; height: 50px; border: 3px solid rgba(0, 243, 255, 0.3);
+            border-top-color: #00f3ff; border-radius: 50%;
+            animation: spin 1s linear infinite; margin-bottom: 20px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* HUD */
+        #hud {
+            position: absolute; top: 20px; left: 20px; z-index: 10;
+            background: rgba(0, 10, 30, 0.7); border: 1px solid rgba(0, 243, 255, 0.3);
+            padding: 15px; border-radius: 12px; backdrop-filter: blur(8px);
+            color: #fff; width: 220px; pointer-events: none;
+            box-shadow: 0 0 20px rgba(0, 243, 255, 0.1);
+        }
+        .hud-title { color: #00f3ff; font-weight: 700; letter-spacing: 1px; margin-bottom: 10px; font-size: 14px; text-transform: uppercase; }
+        .stat-row { display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 13px; }
+        .stat-val { font-family: 'Courier New', monospace; font-weight: bold; }
+        .bar-bg { height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; margin-top: 10px; overflow: hidden; }
+        .bar-fill { height: 100%; background: #00f3ff; width: 0%; transition: width 0.5s; box-shadow: 0 0 8px #00f3ff; }
+
+        /* Reset Button */
+        #reset-progress{
+            position: absolute; top: 180px; left: 20px; z-index: 11;
+            padding: 10px 14px; border-radius: 10px;
+            background: rgba(0,10,30,0.65); border: 1px solid rgba(0,243,255,0.25);
+            color: #00f3ff; font-weight: 700; cursor: pointer; backdrop-filter: blur(8px);
+            font-size: 14px;
+        }
+        #reset-progress:hover{ background: rgba(0,243,255,0.12); }
+
+        /* Panel */
+        #panel {
+            position: fixed; right: -480px; top: 0; width: 420px; height: 100%;
+            background: rgba(5, 10, 25, 0.95); border-left: 1px solid rgba(0, 243, 255, 0.2);
+            backdrop-filter: blur(15px); z-index: 20; transition: right 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
+            display: flex; flex-direction: column; box-shadow: -10px 0 40px rgba(0,0,0,0.8);
+        }
+        #panel.active { right: 0; }
+        .panel-content { padding: 30px; overflow-y: auto; flex: 1; }
+        .q-tag { color: #00f3ff; font-size: 12px; border: 1px solid rgba(0, 243, 255, 0.3); padding: 4px 8px; border-radius: 4px; display: inline-block; margin-bottom: 15px; }
+        .q-text { font-size: 18px; line-height: 1.6; color: #eef; margin-bottom: 30px; text-shadow: 0 2px 4px rgba(0,0,0,0.5); }
+        .opt-btn {
+            background: linear-gradient(90deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0) 100%);
+            border: 1px solid rgba(255,255,255,0.1); padding: 16px; margin-bottom: 12px;
+            color: #ccc; cursor: pointer; border-radius: 8px; transition: 0.3s;
+        }
+        .opt-btn:hover:not(.disabled) { border-color: #00f3ff; color: #fff; background: rgba(0, 243, 255, 0.1); }
+        .opt-btn.correct { border-color: #00ff88; background: rgba(0, 255, 136, 0.2); color: #fff; }
+        .opt-btn.wrong { border-color: #ff3366; background: rgba(255, 51, 102, 0.15); color: #aaa; text-decoration: line-through; opacity: 0.7; }
+        .opt-btn.disabled { cursor: default; pointer-events: none; }
+        .close-btn { position: absolute; top: 20px; right: 20px; color: #555; cursor: pointer; font-size: 24px; }
+        .close-btn:hover { color: #fff; }
+
+        /* Feedback */
+        #feedback { margin-top: 20px; padding: 15px; border-radius: 8px; text-align: center; font-weight: bold; opacity: 0; transition: opacity 0.5s; }
+        .fb-win { background: rgba(0, 255, 136, 0.1); color: #00ff88; border: 1px solid rgba(0, 255, 136, 0.3); }
+        .fb-lose { background: rgba(255, 51, 102, 0.1); color: #ff3366; border: 1px solid rgba(255, 51, 102, 0.3); }
+        .fb-recover { background: rgba(255, 200, 0, 0.1); color: #ffcc00; border: 1px solid rgba(255, 200, 0, 0.3); }
+
+        /* Background */
+        body::before{
+            content:""; position:fixed; inset:0; pointer-events:none;
+            background: radial-gradient(1200px 800px at 18% 28%, rgba(120,85,255,0.18), transparent 62%),
+                        linear-gradient(180deg, #000008 0%, #000010 60%, #000008 100%);
+            z-index:0;
+        }
+        #3d-graph{ position:relative; z-index:1; }
+    </style>
+</head>
+<body>
+
+    <div id="intro-title-container">
+        <div class="intro-text">
+            欢迎来到 RIALO 测试
+            <span class="intro-sub">Confidential Computation Galaxy</span>
+        </div>
+    </div>
+
+    <div id="loading">
+        <div class="loader-ring"></div>
+        <div>宇宙初始化中...</div>
+    </div>
+
+    <div id="hud">
+        <div class="hud-title">系统状态 (System Status)</div>
+        <div class="stat-row"><span style="color:#666">节点总数</span> <span class="stat-val">85</span></div>
+        <div class="stat-row"><span style="color:#00f3ff">未探索</span> <span class="stat-val" id="val-blue">85</span></div>
+        <div class="stat-row"><span style="color:#00ff88">已修复</span> <span class="stat-val" id="val-green">0</span></div>
+        <div class="stat-row"><span style="color:#ff3366">已损坏</span> <span class="stat-val" id="val-red">0</span></div>
+        <div class="bar-bg"><div class="bar-fill" id="progress-bar"></div></div>
+    </div>
+
+    <button id="reset-progress">重置进度 (RESET)</button>
+
+    <div id="3d-graph"></div>
+
+    <div id="panel">
+        <div class="close-btn" onclick="closePanel()">×</div>
+        <div class="panel-content">
+            <div class="q-tag" id="panel-id">节点信号 #01</div>
+            <div class="q-text" id="panel-q">加载中...</div>
+            <div id="panel-opts"></div>
+            <div id="feedback"></div>
+        </div>
+    </div>
+
+    <script>
+        // ===========================================
+        // 1. 数据 (已翻译为中文)
+        // ===========================================
+                const questionData = [
+            { id: 1, q: "Rialo 社区叙事里最突出的核心价值是？", options: { A: "隐私 + 现实世界集成", B: "追求短期最大收益", C: "收集 NFT", D: "以上皆是" }, answer: "A", status: 'unanswered' },
+            { id: 2, q: "Rialo 的核心基础设施重点是什么？", options: { A: "游戏 SDK", B: "NFT 铸造引擎", C: "底层机密计算（Confidential Computation）", D: "借贷协议" }, answer: "C", status: 'unanswered' },
+            { id: 3, q: "Rialo 最想改善区块链使用的哪个方向？", options: { A: "永续 DEX（Perp DEX）", B: "带隐私的现实世界落地", C: "面向 AI Agent 的项目", D: "垃圾币交易" }, answer: "B", status: 'unanswered' },
+            { id: 4, q: "在 Rialo 的架构里，隐私主要在哪一层实现？", options: { A: "协议层", B: "只在前端工具里", C: "只靠外部插件", D: "只通过钱包" }, answer: "A", status: 'unanswered' },
+            { id: 5, q: "推文里宣布集成了哪个钱包？", options: { A: "Keplr", B: "MetaMask", C: "Phantom", D: "Trust Wallet" }, answer: "A", status: 'unanswered' },
+            { id: 6, q: "Rialo 的设计最适合哪类应用？", options: { A: "游戏叠加层", B: "需要安全处理数据的应用", C: "NFT 画廊/展示站", D: "纯交易终端" }, answer: "B", status: 'unanswered' },
+            { id: 7, q: "隐私在 Rialo 技术栈里是什么定位？", options: { A: "临时工具", B: "第三方服务", C: "可选外挂", D: "原生内置能力" }, answer: "D", status: 'unanswered' },
+            { id: 8, q: "Rialo 想连接哪些系统？", options: { A: "只连接钱包和交易所", B: "游戏和 NFT", C: "传统系统与区块链基础设施", D: "验证者和矿工" }, answer: "C", status: 'unanswered' },
+            { id: 9, q: "企业可能选择用 Rialo 的关键原因是？", options: { A: "更快铸造 NFT", B: "公共数据更透明", C: "更容易炒币", D: "能安全处理机密信息" }, answer: "D", status: 'unanswered' },
+            { id: 10, q: "Harry Halpin 关于隐私提出的更大观点是？", options: { A: "只是技术偏好", B: "扩容时可有可无", C: "文化上已经过时", D: "隐私是人类自由的基础" }, answer: "D", status: 'unanswered' },
+            { id: 11, q: "隐私保护信用（Privacy-Preserving Credit）让用户能做什么？", options: { A: "无抵押借款", B: "隐藏还款历史", C: "不泄露数据也能证明信用", D: "绕开合规检查" }, answer: "C", status: 'unanswered' },
+            { id: 12, q: "哪个用例强调“机构参与但不暴露策略”？", options: { A: "安全链下同步（Secure Offchain Sync）", B: "私密金融市场（Private Financial Markets）", C: "隐私保护信用（Privacy-Preserving Credit）", D: "流式资本（Streaming Capital）" }, answer: "B", status: 'unanswered' },
+            { id: 13, q: "是什么阻止了今天的链上应用对接银行和私有 API？", options: { A: "用户体验太差", B: "可编程性有限", C: "默认透明", D: "监管阻力" }, answer: "C", status: 'unanswered' },
+            { id: 14, q: "为什么公链一直没能扩展到现实世界用例？", options: { A: "吞吐不够", B: "太贵", C: "默认透明", D: "缺开发者工具" }, answer: "C", status: 'unanswered' },
+            { id: 15, q: "Rialo 如何在不增加风险的情况下降低抵押要求？", options: { A: "更严格的清算", B: "限制杠杆", C: "用不同方式给波动定价", D: "让追偿/回收变得可衡量" }, answer: "D", status: 'unanswered' },
+            { id: 16, q: "Live Credit Telemetry 在协议层能实现什么？", options: { A: "固定抵押比例", B: "动态调整风险", C: "更快清算", D: "更高杠杆" }, answer: "B", status: 'unanswered' },
+            { id: 17, q: "什么核心限制让 DeFi 协议“定价的是恐惧而不是信用”？", options: { A: "市场波动", B: "流动性不足", C: "治理工具缺失", D: "缺少现实世界信号" }, answer: "D", status: 'unanswered' },
+            { id: 18, q: "为什么说 DeFi 的超额抵押是个 bug？", options: { A: "降低收益效率", B: "默认假设零回收", C: "拖慢交易速度", D: "限制可组合性" }, answer: "B", status: 'unanswered' },
+            { id: 19, q: "Web3 搭强团队的难点是什么？", options: { A: "招到有经验工程师", B: "留住贡献者", C: "对齐激励", D: "让人才真正高效协作" }, answer: "D", status: 'unanswered' },
+            { id: 20, q: "为什么当前 DeFi 模型被称为“闭环”？", options: { A: "只服务交易者", B: "一直在循环投机资本", C: "排斥机构", D: "过度依赖稳定币" }, answer: "B", status: 'unanswered' },
+            { id: 21, q: "文章说，未来隐私应该怎么对待？", options: { A: "当成应用层功能", B: "当成可选升级", C: "当成监管层", D: "当成协议层的核心要求" }, answer: "D", status: 'unanswered' },
+            { id: 22, q: "今天真正的 Web3 实用性被什么卡住了？", options: { A: "用户体验差", B: "流动性碎片化", C: "缺少隐私原语", D: "吞吐受限" }, answer: "C", status: 'unanswered' },
+            { id: 23, q: "Rialo 在对接信用时明确不依赖哪类基础设施？", options: { A: "可信委员会", B: "预言机和中间件", C: "治理审批", D: "二层 Rollup" }, answer: "B", status: 'unanswered' },
+            { id: 24, q: "在协议层降低不确定性，最直接的效果是？", options: { A: "更快出块", B: "更高收益", C: "更低抵押要求", D: "更少验证者" }, answer: "C", status: 'unanswered' },
+            { id: 25, q: "为了解决这个问题，Rialo 把什么做成链上原生可编程？", options: { A: "链下价格喂价", B: "交易策略", C: "现实世界信用信号", D: "治理声誉" }, answer: "D", status: 'unanswered' },
+            { id: 26, q: "为什么说 DeFi 是超额抵押的？", options: { A: "Gas 费不可预测", B: "波动太大", C: "协议按最坏违约情况来算", D: "看不到现实世界信用" }, answer: "D", status: 'unanswered' },
+            { id: 27, q: "按文章说，开发十年后“现在不一样了”是因为？", options: { A: "监管更完善了", B: "资本市场更成熟了", C: "技术终于到位了", D: "用户更要求去中心化" }, answer: "C", status: 'unanswered' },
+            { id: 28, q: "文章说历史上一直限制区块链基础设施的是什么问题？", options: { A: "开发者兴趣不足", B: "竞争公链太多", C: "先有 hype，后有能用的技术", D: "代币激励不够" }, answer: "C", status: 'unanswered' },
+            { id: 29, q: "超级模性（Supermodularity）对区块链的核心启示是？", options: { A: "集成越多越好", B: "架构不重要", C: "要用经济学来指导集成", D: "模块化已经过时" }, answer: "C", status: 'unanswered' },
+            { id: 30, q: "自动化 + SfS 组合后，Rialo 会出现哪种能力？", options: { A: "Gas 抽象", B: "无限重试", C: "持久化工作流", D: "验证者补贴" }, answer: "C", status: 'unanswered' },
+            { id: 31, q: "超级模性给系统设计的启发式规则是什么？", options: { A: "有选择地集成", B: "把核心逻辑外包出去", C: "尽量减少原生功能", D: "先只优化 UX" }, answer: "A", status: 'unanswered' },
+            { id: 32, q: "为什么法币入金通道（fiat onramps）不算和执行层 supermodular？", options: { A: "会增加延迟", B: "会抬高合规成本", C: "它不会反过来强化“生产/执行”", D: "会限制去中心化" }, answer: "C", status: 'unanswered' },
+            { id: 33, q: "为什么拿 Hyperliquid 当 supermodular 区块链例子？", options: { A: "它把执行外包了", B: "它把交易功能做成一体", C: "它把依赖压到最少", D: "它优化了治理" }, answer: "B", status: 'unanswered' },
+            { id: 34, q: "哪个现实世界的集成最能说明 supermodularity？", options: { A: "智能手机", B: "数据中心", C: "电网", D: "即时通讯应用" }, answer: "A", status: 'unanswered' },
+            { id: 35, q: "supermodular 系统里“1 + 1 = 3”代表什么？", options: { A: "成本下降", B: "涌现的新能力", C: "并行执行", D: "更高吞吐" }, answer: "B", status: 'unanswered' },
+            { id: 36, q: "老的“模块化 vs 单体化”争论基本忽略了什么关键因素？", options: { A: "开发者激励", B: "集成的经济学", C: "验证者行为", D: "网络拓扑" }, answer: "B", status: 'unanswered' },
+            { id: 37, q: "为什么说“模块化 vs 单体化”的框架过时了？", options: { A: "性能不再稀缺", B: "治理取代了架构", C: "安全假设变了", D: "互操作失败了" }, answer: "A", status: 'unanswered' },
+            { id: 38, q: "Rialo 想在隐私生态里扮演什么角色？", options: { A: "新的 Layer 1 公链", B: "主打隐私的钱包", C: "把 Web3 密码学和传统系统连起来的基础设施", D: "替换现有 ZK 协议" }, answer: "C", status: 'unanswered' },
+            { id: 39, q: "Yan 为什么强调 Web3 落地要“隐私 + 合规”一起做？", options: { A: "提升交易吞吐", B: "满足传统金融的要求", C: "降低验证者风险", D: "统一治理标准" }, answer: "B", status: 'unanswered' },
+            { id: 40, q: "零知识证明（ZK）怎么同时做到隐私和可验证？", options: { A: "把交易内容完全隐藏", B: "执行后把所有数据都公开", C: "在不暴露底层数据的情况下证明结果正确", D: "依赖可信第三方" }, answer: "C", status: 'unanswered' },
+            { id: 41, q: "按文中 cypherpunk 观点，隐私主要应该给谁？", options: { A: "公司和机构", B: "验证者和矿工", C: "个人与弱势群体", D: "政府和监管" }, answer: "C", status: 'unanswered' },
+            { id: 42, q: "Ashling 用什么类比解释“隐私不该需要自证合理”？", options: { A: "隐私像干净的水", B: "隐私像衣服", C: "隐私像家", D: "隐私像护照" }, answer: "C", status: 'unanswered' },
+            { id: 43, q: "mixnet 想怎么把隐私从“只加密内容”再往上提一档？", options: { A: "提高交易速度", B: "隐藏通信模式/路径", C: "降低带宽使用", D: "去中心化验证者" }, answer: "B", status: 'unanswered' },
+            { id: 44, q: "VPN 和 Tor 依然很难完全防住什么问题？", options: { A: "智能合约漏洞", B: "Gas 费操纵", C: "基于元数据的流量分析", D: "加密密钥被盗" }, answer: "C", status: 'unanswered' },
+            { id: 45, q: "为什么 Groth16 被认为是 ZK 的转折点？", options: { A: "降低了硬件要求", B: "实现了秒级跨链转账", C: "让 ZK 证明变得实用、可大规模采用", D: "取代了 trusted setup 的假设" }, answer: "C", status: 'unanswered' },
+            { id: 46, q: "讲者说他们 2016 年第一次见面时，哪些技术还更多停留在理论？", options: { A: "Rollup 和侧链", B: "MPC 和 FHE", C: "稳定币和 AMM", D: "智能合约和 DAO" }, answer: "B", status: 'unanswered' },
+            { id: 47, q: "Privacy Roundtable 的 X Space 主要目的是？", options: { A: "宣布新代币", B: "复盘市场表现", C: "讨论隐私技术的演进与未来", D: "争论区块链扩容极限" }, answer: "C", status: 'unanswered' },
+            { id: 48, q: "为什么说 Stake-for-Service 是一种宏观政策工具？", options: { A: "它控制验证者激励", B: "2B：能在不通胀的情况下，直接又有上限地刺激需求", C: "它替代治理投票", D: "它稳定代币价格" }, answer: "B", status: 'unanswered' },
+            { id: 49, q: "Stake-for-Service 怎么化解“安全 vs 实用”的质押取舍？", options: { A: "缩短锁仓期", B: "增加代币供给", C: "让收益去支付活动费用，而本金仍在质押", D: "优先把收益给 DeFi 用" }, answer: "C", status: 'unanswered' },
+            { id: 50, q: "ServicePaymaster（SPM）在 SfS 流程里负责啥？", options: { A: "管理治理投票", B: "发放质押奖励", C: "把奖励换成 credits 并完成结算支付", D: "挑选验证者" }, answer: "C", status: 'unanswered' },
+            { id: 51, q: "把排程和付款做成原生能力，Rialo 得到什么结构性优势？", options: { A: "更快出块", B: "不再依赖链下自动化组件", C: "更高的质押 APY", D: "降低验证者硬件成本" }, answer: "B", status: 'unanswered' },
+            { id: 52, q: "为什么 SfS 的服务 credits 不能在“服务之外”转让？", options: { A: "为了降低 gas 成本", B: "为了防止投机", C: "为了符合监管", D: "为了简化账务" }, answer: "B", status: 'unanswered' },
+            { id: 53, q: "SfS 里被路由的质押奖励最后会怎样？", options: { A: "被销毁", B: "送去治理", C: "先经过用户钱包", D: "通过 ServicePaymaster 铸造成服务 credits" }, answer: "D", status: 'unanswered' },
+            { id: 54, q: "一个 SfS position 允许用户或合约指定什么？", options: { A: "固定 gas 价格", B: "验证者佣金率", C: "质押奖励的路由比例", D: "锁仓到期日" }, answer: "C", status: 'unanswered' },
+            { id: 55, q: "今天跑长期 dApp，开发者最常遇到的摩擦是什么？", options: { A: "验证者频繁更换", B: "为持续费用准备运营资金（float）", C: "可用编程语言太少", D: "治理审批太慢" }, answer: "B", status: 'unanswered' },
+            { id: 56, q: "Stake-for-Service 把质押收益的角色变成了什么？", options: { A: "让质押奖励更高", B: "把收益锁去治理投票", C: "把收益变成实时服务付款", D: "延迟奖励发放" }, answer: "C", status: 'unanswered' },
+            { id: 57, q: "Stake-for-Service 主要要解决链上系统的什么核心问题？", options: { A: "验证者参与度低", B: "质押本金和服务付款之间割裂", C: "代币通胀过高", D: "交易终局太慢" }, answer: "B", status: 'unanswered' },
+            { id: 58, q: "为什么只靠 ZK 还不够撑起真实应用？", options: { A: "它不够去中心化", B: "它没法全球扩展", C: "它只是一部分隐私工具箱，不是全套", D: "它需要可信硬件" }, answer: "C", status: 'unanswered' },
+            { id: 59, q: "Rialo 的编排层（orchestration layer）里包含哪项职责？", options: { A: "铸造代币", B: "执行证明/执行背书（attestation）", C: "治理投票", D: "手续费优化" }, answer: "B", status: 'unanswered' },
+            { id: 60, q: "Rialo Extended Execution（REX）把什么统一起来？", options: { A: "Rollup 和侧链", B: "验证者和排序器（sequencers）", C: "MPC、FHE 和 TEE", D: "预言机和跨链桥" }, answer: "C", status: 'unanswered' },
+            { id: 61, q: "Rialo 最关键的架构突破是什么？", options: { A: "新的共识算法", B: "隐私保护的编排层", C: "通用 zk 证明系统", D: "跨链流动性引擎" }, answer: "B", status: 'unanswered' },
+            { id: 62, q: "文章说，没有隐私 Web3 就没法规模化，原因是？", options: { A: "公链太慢", B: "费用不可预测", C: "默认公开的系统处理不了敏感数据或 Web2 认证", D: "治理太碎片化" }, answer: "C", status: 'unanswered' },
+            { id: 63, q: "“乐观 vs 悲观 并发控制”可视化在展示什么？", options: { A: "不同的罚没（slashing）方式", B: "执行与协调之间的权衡", C: "代币发行节奏", D: "Rollup 结算时机" }, answer: "B", status: 'unanswered' },
+            { id: 64, q: "为什么“完全匿名”会给应用带来麻烦？", options: { A: "交易成本更高", B: "可组合性更差", C: "信任会被打碎", D: "出块更慢" }, answer: "C", status: 'unanswered' },
+            { id: 65, q: "现实世界应用最关键的平衡是什么？", options: { A: "速度 vs 去中心化", B: "成本 vs 可扩展性", C: "隐私 vs 可验证性", D: "治理 vs 激励" }, answer: "C", status: 'unanswered' },
+            { id: 66, q: "Jan Camenisch 在 Subzero Labs 担任什么角色？", options: { A: "首席隐私官", B: "首席协议架构师", C: "杰出研究员（Distinguished Researcher）", D: "开发者关系负责人" }, answer: "C", status: 'unanswered' },
+            { id: 67, q: "为什么说 Jan Camenisch 是真正 Web3 规模化的“催化剂”？", options: { A: "他专注代币流动性设计", B: "他推进隐私与可验证计算", C: "他优化共识吞吐", D: "他打造面向消费者的 dApp" }, answer: "B", status: 'unanswered' },
+            { id: 68, q: "ACE（Advanced Computing Engine）由什么组成？", options: { A: "只有全同态加密（FHE）", B: "MPC + FHE + TEE 的组合", C: "智能合约 + Rollup", D: "可信验证者 + 预言机" }, answer: "B", status: 'unanswered' },
+            { id: 69, q: "Rialo 的密码学编排层能给开发者带来什么？", options: { A: "更快发币", B: "部署许可链", C: "在去中心化应用里安全使用加密数据和 API key", D: "跨链流动性路由" }, answer: "C", status: 'unanswered' },
+            { id: 70, q: "按文章说，Web3 为什么除了 DeFi 之外一直难出圈？", options: { A: "代币流动性差", B: "手续费太高", C: "默认公开的系统处理不了敏感数据", D: "缺少开发者工具" }, answer: "C", status: 'unanswered' },
+            { id: 71, q: "Jan Camenisch 在 Dfinity 担任什么职位？", options: { A: "验证者激励负责人", B: "首席技术官（CTO）", C: "智能合约审计负责人", D: "治理委员会主席" }, answer: "B", status: 'unanswered' },
+            { id: 72, q: "下面哪项不在 Camenisch 的 MPC 相关工作清单里？", options: { A: "分布式密钥生成", B: "门限签名", C: "可验证随机性", D: "公开 mempool 加密" }, answer: "D", status: 'unanswered' },
+            { id: 73, q: "Camenisch–Lysyanskaya（CL）签名为什么重要？", options: { A: "降低交易手续费", B: "支持不可关联、隐私保护的凭证", C: "替代硬件安全模块（HSM）", D: "加快区块终局" }, answer: "B", status: 'unanswered' },
+            { id: 74, q: "哪一个例子最能说明文中的“选择性披露”？", options: { A: "只展示钱包余额，不暴露地址", B: "证明年龄达标，但不透露生日", C: "只分享收入区间，不报具体工资", D: "免 gas 签交易" }, answer: "B", status: 'unanswered' },
+            { id: 75, q: "Identity Mixer（Idemix）主要解决了什么问题？", options: { A: "快速跨链转账", B: "在不暴露身份的情况下做选择性披露", C: "链上信用评分", D: "代币化访问控制" }, answer: "B", status: 'unanswered' },
+            { id: 76, q: "下面哪一项不是 Camenisch 密码学研究的核心方向？", options: { A: "匿名凭证", B: "隐私保护身份", C: "安全多方计算", D: "PoW 共识设计" }, answer: "D", status: 'unanswered' },
+            { id: 77, q: "Jan Camenisch 加入 Subzero Labs 为何被认为是 Rialo 的重要里程碑？", options: { A: "扩大 Rialo 的验证者集合", B: "夯实 Rialo 的隐私和密码学底座", C: "加速发币计划", D: "转向消费级社交应用" }, answer: "B", status: 'unanswered' },
+            { id: 78, q: "Ade 说什么帮他扛过了纽约第一场冬天？", options: { A: "打折买的新暖气", B: "5 美元一瓶维生素 D", C: "每天在中央公园跑步", D: "日光疗愈灯" }, answer: "B", status: 'unanswered' },
+            { id: 79, q: "在 Rialo 系统里，流式放款（streaming disbursements）是干嘛的？", options: { A: "提高敞口去赚更高收益", B: "让借款人随时暂停贷款", C: "只要信用状态健康才继续放款，从而封顶峰值敞口", D: "支持托管式出金" }, answer: "C", status: 'unanswered' },
+            { id: 80, q: "下面哪项是 Rialo “更安全借贷”的三把新杠杆之一？", options: { A: "自动清算机器人", B: "经认证的信用信号（attested credit signals）", C: "PoW 打分", D: "用 NFT 做风控/承销" }, answer: "B", status: 'unanswered' },
+            { id: 81, q: "把现实世界的回收/追偿信号上链，会带来什么效果？", options: { A: "利率上升但抵押不变", B: "回收率上升、抵押要求下降", C: "贷款变成许可制", D: "借款人必须提交纸质材料" }, answer: "B", status: 'unanswered' },
+            { id: 82, q: "为什么在现有借贷体系下，链上市场会默认“零回收”？", options: { A: "流动性质押太波动", B: "缺少身份、收入和回收数据", C: "大多数链的超额抵押是违法的", D: "稳定币扭曲了还款估计" }, answer: "B", status: 'unanswered' },
+            { id: 83, q: "把已验证的凭证（verified credentials）流式上链，有什么好处？", options: { A: "出借方可以每周调利率", B: "借款人不需要钱包", C: "智能合约能自动评估借款人状态", D: "手续费降到 0" }, answer: "C", status: 'unanswered' },
+            { id: 84, q: "下面哪项不属于 Rialo 让现实世界信用信号“可编程”的方式？", options: { A: "通过 Plaid 证明 FICO", B: "链上原生验证凭证", C: "智能合约自动批贷", D: "中心化风控团队人工审核" }, answer: "D", status: 'unanswered' },
+            { id: 85, q: "为什么链上出借方现在会无视借款人的现实世界信用分？", options: { A: "他们觉得信用分过时", B: "法律不允许存储信用信息", C: "他们看不到链下信用数据", D: "更愿意只看加密交易历史" }, answer: "C", status: 'unanswered' }
+        ];
+
+        // ===========================================
+        // 2. 进度管理
+        // ===========================================
+        const STORE_KEY = "rialo_v5_refined_cn";
+        function saveProgress() {
+            try { localStorage.setItem(STORE_KEY, JSON.stringify(questionData.map(q => ({id:q.id, status:q.status, sw:q.selectedWrong})))); } catch(e){}
+        }
+        function loadProgress() {
+            try {
+                const raw = localStorage.getItem(STORE_KEY);
+                if(!raw) return;
+                const arr = JSON.parse(raw);
+                const map = new Map(arr.map(x=>[x.id,x]));
+                questionData.forEach(q => {
+                    const s = map.get(q.id);
+                    if(s) { q.status = s.status||'unanswered'; q.selectedWrong = s.sw; }
+                });
+            } catch(e){}
+        }
+        let stats = { correct:0, wrong:0, total:85 };
+        function recomputeStats(){
+            stats.correct = questionData.filter(q=>q.status==='correct').length;
+            stats.wrong = questionData.filter(q=>q.status==='wrong').length;
+            updateHUD();
+        }
+
+        // ===========================================
+        // 3. 纹理与材质 (只保留 Galaxy 配色)
+        // ===========================================
+        const PALETTES = {
+            // 对齐 HUD：未探索=蓝、已修复=绿、已损坏=红（提高远景辨识度）
+            galaxy: { u:['#00f3ff','#00f3ff'], c:['#00ff88','#00ff88'], w:['#ff3366','#ff3366'] }
+        };
+        let curPal = 'galaxy';
+        
+        function createHyperGlowTexture(c1, c2) {
+            const size = 256; 
+            const canvas = document.createElement('canvas'); canvas.width=size; canvas.height=size;
+            const ctx = canvas.getContext('2d');
+            const c = size/2;
+            const g = ctx.createRadialGradient(c,c,0,c,c,c);
+            g.addColorStop(0, 'rgba(255,255,255,1)');    
+            g.addColorStop(0.15, 'rgba(255,255,255,0.9)'); 
+            g.addColorStop(0.3, c1);
+            g.addColorStop(0.6, c2);
+            g.addColorStop(1, 'rgba(0,0,0,0)');
+            ctx.fillStyle=g; ctx.fillRect(0,0,size,size);
+            return new THREE.CanvasTexture(canvas);
+        }
+        
+        function createFlareTexture() {
+            const size = 128;
+            const canvas = document.createElement('canvas'); canvas.width=size; canvas.height=size;
+            const ctx = canvas.getContext('2d');
+            const c = size/2;
+            ctx.shadowBlur = 8; 
+            ctx.shadowColor = "white";
+            ctx.strokeStyle = "rgba(255,255,255,0.9)";
+            ctx.lineWidth = 2; 
+            ctx.beginPath();
+            ctx.moveTo(0, c); ctx.lineTo(size, c); 
+            ctx.moveTo(c, 0); ctx.lineTo(c, size); 
+            ctx.stroke();
+            const g = ctx.createRadialGradient(c,c,0,c,c,c);
+            g.addColorStop(0, 'rgba(255,255,255,0.8)');
+            g.addColorStop(1, 'rgba(0,0,0,0)');
+            ctx.fillStyle = g;
+            ctx.fillRect(0,0,size,size);
+            return new THREE.CanvasTexture(canvas);
+        }
+        const flareTex = createFlareTexture();
+        
+        function createCoreTexture() {
+            const c = document.createElement('canvas'); c.width=64; c.height=64;
+            const ctx = c.getContext('2d');
+            const g = ctx.createRadialGradient(32,32,0,32,32,32);
+            g.addColorStop(0,'rgba(255,255,255,1)');
+            g.addColorStop(0.5,'rgba(255,255,255,0.8)');
+            g.addColorStop(1,'rgba(0,0,0,0)');
+            ctx.fillStyle=g; ctx.fillRect(0,0,64,64);
+            return new THREE.CanvasTexture(c);
+        }
+        const coreTex = createCoreTexture();
+
+        // ===========================================
+        // 4. 3D 图谱初始化
+        // ===========================================
+        loadProgress();
+        recomputeStats();
+
+        const Graph = ForceGraph3D()(document.getElementById('3d-graph'))
+            .graphData({ nodes: questionData, links: [] }) 
+            .nodeLabel(n => `节点 #${n.id}`) 
+            .backgroundColor('rgba(0,0,0,0)') 
+            .showNavInfo(false)
+            .nodeThreeObject(node => {
+                const p = PALETTES[curPal];
+                let colors = p.u;
+                if(node.status==='correct') colors = p.c;
+                if(node.status==='wrong') colors = p.w;
+
+                const group = new THREE.Group();
+                const glowSize = 180; // 外围光雾扩大，减弱十字光线的突兀感 
+                const glowMat = new THREE.SpriteMaterial({ 
+                    map: createHyperGlowTexture(colors[0], colors[1]), 
+                    depthWrite: false, 
+                    blending: THREE.AdditiveBlending,
+                    opacity: 0.5 
+                });
+                const glow = new THREE.Sprite(glowMat);
+                glow.scale.set(glowSize, glowSize, 1);
+                group.add(glow);
+                
+                const flareSize = 100; 
+                const flareMat = new THREE.SpriteMaterial({
+                    map: flareTex,
+                    depthWrite: false,
+                    blending: THREE.AdditiveBlending,
+                    opacity: 0.30,
+                    rotation: Math.random() * Math.PI 
+                });
+                const flare = new THREE.Sprite(flareMat);
+                flare.scale.set(flareSize, flareSize, 1);
+                group.add(flare);
+
+                const coreSize = 14;
+                const coreMat = new THREE.SpriteMaterial({ 
+                    map: coreTex,
+                color: new THREE.Color(colors[0]), 
+                    depthWrite: false,
+                    blending: THREE.AdditiveBlending,
+                    opacity: 1.0 
+                });
+                const core = new THREE.Sprite(coreMat);
+                core.scale.set(coreSize, coreSize, 1);
+                group.add(core);
+
+                group.userData = { glow, flare, core, baseGlow: glowSize, baseFlare: flareSize, baseCore: coreSize }; 
+                return group;
+            })
+            .onNodeClick(node => openPanel(node.id));
+
+        Graph.d3Force('charge').strength(-180); 
+
+        // ===========================================
+        // 5. 拓扑星尘
+        // ===========================================
+        let interStars = null;
+        function createInterstitialStars() {
+            const nodes = Graph.graphData().nodes;
+            const hasCoords = nodes.length > 0 && (nodes[0].x !== undefined && nodes[0].x !== 0);
+            const getPos = () => {
+                if(!hasCoords) {
+                    const r = 300 * Math.cbrt(Math.random());
+                    const theta = Math.random() * Math.PI * 2;
+                    const phi = Math.acos(2*Math.random()-1);
+                    return [r*Math.sin(phi)*Math.cos(theta), r*Math.sin(phi)*Math.sin(theta), r*Math.cos(phi)];
+                } else {
+                    const n1 = nodes[Math.floor(Math.random()*nodes.length)];
+                    const n2 = nodes[Math.floor(Math.random()*nodes.length)];
+                    const t = Math.random();
+                    const cx = n1.x + (n2.x - n1.x)*t;
+                    const cy = n1.y + (n2.y - n1.y)*t;
+                    const cz = n1.z + (n2.z - n1.z)*t;
+                    const spread = 120; 
+                    return [cx + (Math.random()-0.5)*spread, cy + (Math.random()-0.5)*spread, cz + (Math.random()-0.5)*spread];
+                }
+            };
+            const group = new THREE.Group();
+            function addLayer(count, size, opacity, colorRange) {
+                const geo = new THREE.BufferGeometry();
+                const pos = []; const cols = [];
+                for(let i=0; i<count; i++){
+                    pos.push(...getPos());
+                    const mix = Math.random();
+                    const c = mix < 0.5 ? colorRange[0] : colorRange[1];
+                    cols.push(c.r, c.g, c.b);
+                }
+                geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+                geo.setAttribute('color', new THREE.Float32BufferAttribute(cols, 3));
+                const mat = new THREE.PointsMaterial({
+                    size: size, vertexColors: true, map: coreTex, transparent: true,
+                    opacity: opacity, depthWrite: false, blending: THREE.AdditiveBlending
+                });
+                return new THREE.Points(geo, mat);
+            }
+            const cBlue = new THREE.Color(0x66ccff), cPurp = new THREE.Color(0xaa66ff), cWhite = new THREE.Color(0xffffff);
+            const dust = addLayer(350000, 1, 0.5, [cBlue, cPurp]);
+            const med = addLayer(48000, 3.0, 0.5, [cBlue, cWhite]);
+            const bri = addLayer(8000, 8, 0.5, [cWhite, cPurp]);
+            group.add(dust, med, bri);
+            group.userData = { dust, med, bri };
+            return group;
+        }
+
+        interStars = createInterstitialStars();
+        Graph.scene().add(interStars);
+
+        Graph.onEngineStop(() => {
+            Graph.scene().remove(interStars);
+            interStars = createInterstitialStars();
+            Graph.scene().add(interStars);
+            document.getElementById('loading').style.opacity = 0;
+            setTimeout(()=>document.getElementById('loading').style.display='none', 1000);
+        });
+
+        // ===========================================
+        // 6. 动画
+        // ===========================================
+        let time = 0;
+        function animate() {
+            time += 0.01;
+            requestAnimationFrame(animate);
+            if(interStars && interStars.userData) {
+                const u = interStars.userData;
+                if(u.dust) u.dust.material.opacity = 0.15 + 0.05 * Math.sin(time*0.5);
+                if(u.med) u.med.material.opacity = 0.3 + 0.1 * Math.sin(time*1.2);
+                if(u.bri) u.bri.material.opacity = 0.6 + 0.2 * Math.sin(time*2.0);
+                interStars.rotation.y = time * 0.01;
+            }
+            const cam = Graph.camera();
+            const controls = Graph.controls();
+            if(controls) {
+                const dist = cam.position.distanceTo(controls.target);
+                const scaleFactor = Math.max(0.4, Math.min(2.0, 800 / dist));
+                Graph.graphData().nodes.forEach(node => {
+                    if(node.__threeObj && node.__threeObj.userData) {
+                        const ud = node.__threeObj.userData;
+                        if(ud.glow) ud.glow.scale.setScalar(ud.baseGlow * scaleFactor);
+                        if(ud.flare) { ud.flare.scale.setScalar(ud.baseFlare * scaleFactor); ud.flare.material.rotation += 0.005; }
+                        if(ud.core) ud.core.scale.setScalar(ud.baseCore * scaleFactor);
+                    }
+                });
+            }
+        }
+        animate();
+
+        // ===========================================
+        // 7. 交互
+        // ===========================================
+        const panel = document.getElementById('panel');
+        function openPanel(id) {
+            const data = questionData.find(q => q.id === id);
+            if(!data) return;
+            document.getElementById('panel-id').textContent = `节点信号 #${id}`;
+            document.getElementById('panel-q').textContent = data.q;
+            document.getElementById('panel-opts').innerHTML = '';
+            document.getElementById('feedback').style.opacity = 0;
+            
+            Object.entries(data.options).forEach(([k,v]) => {
+                const btn = document.createElement('div');
+                btn.className = `opt-btn ${data.status==='correct'?'disabled':''} ${data.status==='wrong'&&data.selectedWrong===k?'wrong disabled':''}`;
+                if(data.status==='correct' && data.answer===k) btn.classList.add('correct');
+                btn.innerHTML = `<b style="color:#00f3ff;margin-right:8px">${k}</b> ${v}`;
+                btn.onclick = () => handleAns(k, data, btn);
+                document.getElementById('panel-opts').appendChild(btn);
+            });
+            panel.classList.add('active');
+        }
+
+        function handleAns(k, data, btn) {
+            if(k === data.answer) {
+                const isRecovery = data.status === 'wrong';
+                data.status = 'correct';
+                showFeedback(true, isRecovery ? "节点已恢复" : "访问许可");
+                if(isRecovery) stats.wrong--;
+            } else {
+                if(data.status !== 'wrong') { data.status = 'wrong'; stats.wrong++; }
+                data.selectedWrong = k;
+                showFeedback(false, "拒绝访问");
+            }
+            saveProgress();
+            recomputeStats();
+            Graph.nodeThreeObject(Graph.nodeThreeObject());
+            openPanel(data.id);
+        }
+
+        function showFeedback(win, txt) {
+            const f = document.getElementById('feedback');
+            f.textContent = txt;
+            f.className = win ? (txt.includes('恢复')?'fb-recover':'fb-win') : 'fb-lose';
+            f.style.opacity = 1;
+        }
+        function closePanel() { panel.classList.remove('active'); }
+        function updateHUD() {
+            document.getElementById('val-blue').textContent = stats.total - stats.correct - stats.wrong;
+            document.getElementById('val-green').textContent = stats.correct;
+            document.getElementById('val-red').textContent = stats.wrong;
+            document.getElementById('progress-bar').style.width = `${(stats.correct/stats.total)*100}%`;
+        }
+        
+        document.getElementById('reset-progress').onclick = () => { if(confirm('确定要重置所有进度吗？')) { localStorage.removeItem(STORE_KEY); location.reload(); } };
+        window.addEventListener('resize', () => { Graph.width(window.innerWidth); Graph.height(window.innerHeight); });
+    </script>
+</body>
+</html>
