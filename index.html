@@ -459,9 +459,9 @@
                 return new THREE.Points(geo, mat);
             }
             const cBlue = new THREE.Color(0x66ccff), cPurp = new THREE.Color(0xaa66ff), cWhite = new THREE.Color(0xffffff);
-            const dust = addLayer(650000, 1, 0.5, [cBlue, cPurp]);
-            const med = addLayer(258000, 3.0, 0.5, [cBlue, cWhite]);
-            const bri = addLayer(10000, 8, 0.5, [cWhite, cPurp]);
+            const dust = addLayer(350000, 1, 0.5, [cBlue, cPurp]);
+            const med = addLayer(58000, 3.0, 0.5, [cBlue, cWhite]);
+            const bri = addLayer(3000, 8, 0.5, [cWhite, cPurp]);
             group.add(dust, med, bri);
             group.userData = { dust, med, bri };
             return group;
